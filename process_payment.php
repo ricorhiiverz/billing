@@ -26,8 +26,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
         $pdo->beginTransaction();
 
         // 1. Ambil detail semua invoice yang akan dibayar untuk validasi dan kalkulasi
+        // PERBAIKAN: Menambahkan alias 'i' dan 'c' untuk menghindari ambiguitas pada kolom 'id'.
         $placeholders = implode(',', array_fill(0, count($invoice_ids), '?'));
-        $stmt_invoices = $pdo->prepare("SELECT id, customer_id, total_amount, wilayah_id FROM invoices JOIN customers ON invoices.customer_id = customers.id WHERE invoices.id IN ($placeholders)");
+        $sql_invoices = "SELECT i.id, i.customer_id, i.total_amount, c.wilayah_id 
+                         FROM invoices i 
+                         JOIN customers c ON i.customer_id = c.id 
+                         WHERE i.id IN ($placeholders)";
+        $stmt_invoices = $pdo->prepare($sql_invoices);
         $stmt_invoices->execute($invoice_ids);
         $invoices_to_pay = $stmt_invoices->fetchAll();
 

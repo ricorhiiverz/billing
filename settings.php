@@ -107,6 +107,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="border-t pt-6 mb-8">
                         <h4 class="font-semibold text-gray-600 mb-4">API Keys Tripay</h4>
                         <div class="space-y-4">
+                            <!-- PERBAIKAN: Menambahkan input untuk Tripay Merchant Code -->
+                             <div>
+                                <label for="tripay_merchant_code" class="block mb-2 text-sm font-medium text-gray-600">Kode Merchant</label>
+                                <input type="text" id="tripay_merchant_code" name="tripay_merchant_code" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-3" value="<?php echo htmlspecialchars($settings['tripay_merchant_code'] ?? ''); ?>">
+                            </div>
                             <div>
                                 <label for="tripay_api_key" class="block mb-2 text-sm font-medium text-gray-600">API Key</label>
                                 <input type="text" id="tripay_api_key" name="tripay_api_key" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-3" value="<?php echo htmlspecialchars($settings['tripay_api_key'] ?? ''); ?>">
