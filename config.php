@@ -34,4 +34,30 @@ try {
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
-?>
+
+
+// --- (BARU) MEKANISME PENYEGARAN DAN VALIDASI SESI ---
+if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true) {
+    
+    // Ambil versi izin terbaru dari DB
+    $stmt_check_version = $pdo->prepare("SELECT permissions_version FROM users WHERE id = ?");
+    $stmt_check_version->execute([$_SESSION['id']]);
+    $current_version = $stmt_check_version->fetchColumn();
+
+    // 1. Validasi Sesi (Force Logout jika versi tidak cocok atau user dihapus)
+    if ($current_version === false || $current_version != $_SESSION['permissions_version']) {
+        // Hancurkan sesi dan redirect ke login
+        session_unset();
+        session_destroy();
+        header("location: login.php");
+        exit;
+    }
+
+    // 2. Penyegaran Data Wilayah untuk Collector
+    if ($_SESSION['role'] == 'collector') {
+        $stmt_wilayah = $pdo->prepare("SELECT wilayah_id FROM user_wilayah WHERE user_id = ?");
+        $stmt_wilayah->execute([$_SESSION['id']]);
+        $_SESSION['wilayah_ids'] = $stmt_wilayah->fetchAll(PDO::FETCH_COLUMN);
+    }
+}
+

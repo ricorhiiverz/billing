@@ -68,17 +68,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         try {
             $pdo->beginTransaction();
 
-            // 1. Update data user (email, password, role)
+            // 1. Update data user, NAIKKAN permissions_version untuk invalidasi sesi lama
+            $base_sql = "UPDATE users SET email = ?, role = ?, permissions_version = permissions_version + 1";
+            $params = [$email, $role];
+            
             if (!empty($new_password)) {
                 $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-                $sql = "UPDATE users SET email = ?, password = ?, role = ? WHERE id = ?";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute([$email, $hashed_password, $role, $user_id]);
-            } else {
-                $sql = "UPDATE users SET email = ?, role = ? WHERE id = ?";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute([$email, $role, $user_id]);
+                $base_sql .= ", password = ?";
+                $params[] = $hashed_password;
             }
+            
+            $base_sql .= " WHERE id = ?";
+            $params[] = $user_id;
+            
+            $stmt = $pdo->prepare($base_sql);
+            $stmt->execute($params);
 
             // 2. Hapus semua penugasan wilayah lama untuk user ini
             $stmt_delete_wilayah = $pdo->prepare("DELETE FROM user_wilayah WHERE user_id = ?");
@@ -238,3 +242,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 </body>
 </html>
+

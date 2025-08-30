@@ -29,7 +29,7 @@ $sql = "SELECT i.id, i.invoice_number, i.amount, i.ppn_amount, i.total_amount, i
         FROM invoices i
         LEFT JOIN payments p ON i.id = p.invoice_id
         WHERE i.customer_id = ?
-        ORDER BY i.billing_period ASC";
+        ORDER BY i.billing_period DESC"; // Diurutkan dari yang terbaru
 $stmt_invoices = $pdo->prepare($sql);
 $stmt_invoices->execute([$customer_id]);
 $all_invoices = $stmt_invoices->fetchAll();
@@ -81,12 +81,9 @@ foreach ($unpaid_invoices as $invoice) {
 
         <main class="p-4 md:p-8 flex-1 overflow-y-auto">
             <div class="max-w-4xl mx-auto">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-2xl md:text-3xl font-bold text-gray-800">Riwayat Tagihan</h2>
-                        <p class="text-lg text-gray-600"><?php echo htmlspecialchars($customer['name']); ?></p>
-                    </div>
-                    <a href="invoices.php?period=<?php echo $selected_period; ?>" class="text-blue-600 hover:underline flex-shrink-0">Kembali ke Daftar Tagihan</a>
+                <div class="mb-6">
+                    <h2 class="text-2xl md:text-3xl font-bold text-gray-800">Riwayat Tagihan</h2>
+                    <p class="text-lg text-gray-600"><?php echo htmlspecialchars($customer['name']); ?></p>
                 </div>
 
                 <!-- Notifikasi -->
@@ -105,7 +102,9 @@ foreach ($unpaid_invoices as $invoice) {
 
                 <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
                     <h3 class="text-lg font-semibold text-gray-700 mb-4">Semua Tagihan</h3>
-                    <div class="border rounded-lg overflow-hidden">
+
+                    <!-- Tampilan Tabel untuk Desktop -->
+                    <div class="hidden md:block border rounded-lg overflow-hidden">
                         <table class="w-full">
                             <thead class="bg-gray-50">
                                 <tr>
@@ -149,6 +148,40 @@ foreach ($unpaid_invoices as $invoice) {
                         </table>
                     </div>
 
+                    <!-- Tampilan Kartu untuk Mobile -->
+                    <div class="md:hidden space-y-3">
+                        <?php foreach ($all_invoices as $invoice): ?>
+                            <div class="border rounded-lg p-4">
+                                <div class="flex justify-between items-start gap-4">
+                                    <div>
+                                        <p class="font-semibold text-gray-800"><?php echo date('F Y', strtotime($invoice['billing_period'])); ?></p>
+                                        <p class="text-sm text-gray-600">Rp <?php echo number_format($invoice['total_amount'], 0, ',', '.'); ?></p>
+                                    </div>
+                                    <?php
+                                        $status_class = '';
+                                        if ($invoice['status'] == 'PAID') $status_class = 'bg-green-100 text-green-800';
+                                        elseif ($invoice['status'] == 'UNPAID') $status_class = 'bg-yellow-100 text-yellow-800';
+                                        else $status_class = 'bg-red-100 text-red-800';
+                                    ?>
+                                    <span class="px-2 py-1 text-xs font-semibold rounded-full <?php echo $status_class; ?>">
+                                        <?php echo htmlspecialchars($invoice['status']); ?>
+                                    </span>
+                                </div>
+                                <?php if ($invoice['status'] == 'PAID' && $_SESSION['role'] == 'admin' && $invoice['payment_method'] == 'cash'): ?>
+                                    <div class="mt-3 pt-3 border-t flex justify-end">
+                                        <a href="cancel_payment.php?invoice_id=<?php echo $invoice['id']; ?>&customer_id=<?php echo $customer_id; ?>&period=<?php echo $selected_period; ?>" 
+                                           onclick="return confirm('Anda yakin ingin membatalkan pembayaran ini? Aksi ini tidak dapat diurungkan.');"
+                                           class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
+                                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                           Batalkan
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+
+
                     <?php if (!empty($unpaid_invoices)): ?>
                         <div class="mt-8 pt-8 border-t">
                             <h3 class="text-lg font-semibold text-gray-700 mb-4">Konfirmasi Pembayaran Tertunggak</h3>
@@ -156,7 +189,7 @@ foreach ($unpaid_invoices as $invoice) {
                             <form id="payment-form" action="process_payment.php" method="POST" onsubmit="return confirm('Anda yakin ingin mengonfirmasi pembayaran ini?');">
                                 <input type="hidden" name="invoice_ids" value="<?php echo implode(',', $invoice_ids_to_pay); ?>">
                                 
-                                <?php if ($_SESSION['role'] == 'admin'): ?>
+                                <?php if (in_array($_SESSION['role'], ['admin', 'collector'])): ?>
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end p-6 bg-gray-50 rounded-lg border">
                                     <div>
                                         <label class="block text-sm font-medium text-gray-700">Total Tagihan</label>
@@ -185,6 +218,13 @@ foreach ($unpaid_invoices as $invoice) {
                              </form>
                         </div>
                     <?php endif; ?>
+                    
+                    <div class="mt-8 pt-6 border-t text-center">
+                        <a href="invoices.php?period=<?php echo $selected_period; ?>" class="inline-flex items-center gap-2 bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 border border-gray-300 rounded-lg shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                            Kembali ke Daftar Tagihan
+                        </a>
+                    </div>
                 </div>
             </div>
         </main>
@@ -238,3 +278,4 @@ foreach ($unpaid_invoices as $invoice) {
 
 </body>
 </html>
+

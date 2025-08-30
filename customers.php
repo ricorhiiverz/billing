@@ -7,14 +7,34 @@ if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     exit;
 }
 
+// --- LOGIKA HAPUS PELANGGAN ---
+if (isset($_GET['delete_id']) && is_numeric($_GET['delete_id']) && $_SESSION['role'] == 'admin') {
+    $customer_id_to_delete = $_GET['delete_id'];
+
+    try {
+        // Karena FOREIGN KEY di tabel invoices menggunakan ON DELETE CASCADE,
+        // semua tagihan terkait akan otomatis terhapus saat pelanggan dihapus.
+        $stmt = $pdo->prepare("DELETE FROM customers WHERE id = ?");
+        $stmt->execute([$customer_id_to_delete]);
+
+        $_SESSION['success_message'] = "Pelanggan dan semua tagihan terkait berhasil dihapus.";
+    } catch (Exception $e) {
+        $_SESSION['error_message'] = "Gagal menghapus pelanggan: " . $e->getMessage();
+    }
+    // Redirect kembali ke halaman customers.php untuk membersihkan URL
+    header("location: customers.php");
+    exit;
+}
+
+
 // --- LOGIKA PENCARIAN & PAGINASI ---
-$limit = 15; 
+$limit = 15;
 $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 $search_term = $_GET['search'] ?? '';
 $search_query = "%" . $search_term . "%";
 
-// --- LOGIKA BARU: PEMBATASAN BERDASARKAN WILAYAH ---
+// --- PEMBATASAN BERDASARKAN WILAYAH ---
 $where_clauses = ["(c.name LIKE ? OR c.customer_number LIKE ? OR c.phone_number LIKE ?)"];
 $params = [$search_query, $search_query, $search_query];
 
@@ -31,30 +51,35 @@ if ($_SESSION['role'] == 'collector') {
 
 $where_sql = "WHERE " . implode(" AND ", $where_clauses);
 
-// Query untuk menghitung total pelanggan (dengan filter)
+// Query untuk menghitung total pelanggan
 $sql_total = "SELECT COUNT(c.id) FROM customers c " . $where_sql;
 $stmt_total = $pdo->prepare($sql_total);
 $stmt_total->execute($params);
 $total_customers = $stmt_total->fetchColumn();
 $total_pages = ceil($total_customers / $limit);
 
-// Query untuk mengambil data pelanggan (dengan filter dan paginasi)
-$sql = "SELECT c.id, c.customer_number, c.name, c.phone_number, p.name as package_name, c.is_active, w.nama_wilayah
+// Query untuk mengambil data pelanggan
+$sql = "SELECT c.id, c.customer_number, c.name, c.phone_number, p.name as package_name, p.price as package_price, c.is_active, w.nama_wilayah
         FROM customers c
         LEFT JOIN packages p ON c.package_id = p.id
         LEFT JOIN wilayah w ON c.wilayah_id = w.id
         " . $where_sql . "
         ORDER BY c.name ASC
-        LIMIT ? OFFSET ?";
+        LIMIT ?, ?";
 
-$params_with_pagination = array_merge($params, [$limit, $offset]);
-
+// --- PERBAIKAN FATAL ERROR ---
 $stmt = $pdo->prepare($sql);
-for ($i = 1; $i <= count($params); $i++) {
-    $stmt->bindValue($i, $params[$i-1]);
+
+// Ikat parameter pencarian dan filter
+$i = 1;
+foreach ($params as $param) {
+    $stmt->bindValue($i, $param);
+    $i++;
 }
-$stmt->bindValue(count($params) + 1, $limit, PDO::PARAM_INT);
-$stmt->bindValue(count($params) + 2, $offset, PDO::PARAM_INT);
+
+// Ikat parameter LIMIT dan OFFSET secara eksplisit sebagai Integer
+$stmt->bindValue($i, $offset, PDO::PARAM_INT);
+$stmt->bindValue($i + 1, $limit, PDO::PARAM_INT);
 
 $stmt->execute();
 $customers = $stmt->fetchAll();
@@ -92,11 +117,29 @@ $customers = $stmt->fetchAll();
             <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                 <h2 class="text-2xl md:text-3xl font-bold text-gray-800">Daftar Pelanggan</h2>
                 <?php if ($_SESSION['role'] == 'admin'): ?>
-                <a href="add_customer.php" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-auto text-center">
-                    + Tambah Pelanggan
-                </a>
+                <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <a href="import_customers.php" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-auto text-center">
+                        Impor Pelanggan
+                    </a>
+                    <a href="add_customer.php" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg w-full sm:w-auto text-center">
+                        + Tambah Pelanggan
+                    </a>
+                </div>
                 <?php endif; ?>
             </div>
+             <!-- Notifikasi -->
+            <?php if(isset($_SESSION['success_message'])): ?>
+                <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+                    <span class="block sm:inline"><?php echo $_SESSION['success_message']; ?></span>
+                </div>
+                <?php unset($_SESSION['success_message']); ?>
+            <?php endif; ?>
+            <?php if(isset($_SESSION['error_message'])): ?>
+                 <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+                    <span class="block sm:inline"><?php echo $_SESSION['error_message']; ?></span>
+                </div>
+                <?php unset($_SESSION['error_message']); ?>
+            <?php endif; ?>
 
             <div class="mb-6">
                 <form action="customers.php" method="GET">
@@ -117,13 +160,14 @@ $customers = $stmt->fetchAll();
                             <th scope="col" class="px-6 py-3">ID Pelanggan</th>
                             <th scope="col" class="px-6 py-3">Nama</th>
                             <th scope="col" class="px-6 py-3">Wilayah</th>
+                            <th scope="col" class="px-6 py-3">Paket</th>
                             <th scope="col" class="px-6 py-3">Status</th>
-                            <th scope="col" class="px-6 py-3">Aksi</th>
+                            <th scope="col" class="px-6 py-3 text-center">Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($customers)): ?>
-                            <tr class="bg-white border-b"><td colspan="5" class="px-6 py-4 text-center">Tidak ada pelanggan.</td></tr>
+                            <tr class="bg-white border-b"><td colspan="6" class="px-6 py-4 text-center">Tidak ada pelanggan.</td></tr>
                         <?php else: ?>
                             <?php foreach ($customers as $customer): ?>
                                 <tr class="bg-white border-b hover:bg-gray-50">
@@ -134,15 +178,27 @@ $customers = $stmt->fetchAll();
                                     </th>
                                     <td class="px-6 py-4"><?php echo htmlspecialchars($customer['nama_wilayah'] ?? 'N/A'); ?></td>
                                     <td class="px-6 py-4">
+                                        <?php echo htmlspecialchars($customer['package_name'] ?? 'N/A'); ?>
+                                        <span class="block text-xs text-gray-500">Rp <?php echo number_format($customer['package_price'] ?? 0, 0, ',', '.'); ?></span>
+                                    </td>
+                                    <td class="px-6 py-4">
                                         <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full <?php echo $customer['is_active'] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'; ?>">
                                             <?php echo $customer['is_active'] ? 'Aktif' : 'Non-Aktif'; ?>
                                         </span>
                                     </td>
-                                    <td class="px-6 py-4 space-x-4">
-                                        <a href="view_customer_invoices.php?id=<?php echo $customer['id']; ?>&period=<?php echo date('Y-m'); ?>" class="font-medium text-green-600 hover:underline">Lihat Tagihan</a>
-                                        <?php if ($_SESSION['role'] == 'admin'): ?>
-                                        <a href="edit_customer.php?id=<?php echo $customer['id']; ?>" class="font-medium text-blue-600 hover:underline">Edit</a>
-                                        <?php endif; ?>
+                                    <td class="px-6 py-4 text-center">
+                                        <div class="flex items-center justify-center space-x-3">
+                                            <?php if ($_SESSION['role'] == 'admin'): ?>
+                                            <a href="edit_customer.php?id=<?php echo $customer['id']; ?>" class="text-blue-600 hover:text-blue-800" title="Edit Pelanggan">
+                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                            </a>
+                                            <a href="customers.php?delete_id=<?php echo $customer['id']; ?>" onclick="return confirm('Anda yakin ingin menghapus pelanggan ini? SEMUA TAGIHAN terkait juga akan dihapus secara permanen.');" class="text-red-600 hover:text-red-800" title="Hapus Pelanggan">
+                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                            </a>
+                                            <?php else: ?>
+                                                <span class="text-gray-400">-</span>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -163,16 +219,24 @@ $customers = $stmt->fetchAll();
                                     <div class="font-bold text-gray-800"><?php echo htmlspecialchars($customer['name']); ?></div>
                                     <div class="text-sm font-mono text-gray-500"><?php echo htmlspecialchars($customer['customer_number']); ?></div>
                                 </div>
-                                <span class="text-xs font-semibold rounded-full px-2 py-0.5 <?php echo $customer['is_active'] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'; ?>">
+                                <span class="flex-shrink-0 ml-4 px-2 py-0.5 text-xs font-semibold rounded-full <?php echo $customer['is_active'] ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'; ?>">
                                     <?php echo $customer['is_active'] ? 'Aktif' : 'Non-Aktif'; ?>
                                 </span>
                             </div>
-                            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-end space-x-4">
-                                <a href="view_customer_invoices.php?id=<?php echo $customer['id']; ?>&period=<?php echo date('Y-m'); ?>" class="font-medium text-green-600 hover:underline">Lihat Tagihan</a>
-                                <?php if ($_SESSION['role'] == 'admin'): ?>
-                                <a href="edit_customer.php?id=<?php echo $customer['id']; ?>" class="font-medium text-blue-600 hover:underline">Edit</a>
-                                <?php endif; ?>
+                            <div class="mt-2 text-sm text-gray-600 space-y-1 border-t pt-2">
+                                <p><span class="font-semibold">Wilayah:</span> <?php echo htmlspecialchars($customer['nama_wilayah'] ?? 'N/A'); ?></p>
+                                <p><span class="font-semibold">Paket:</span> <?php echo htmlspecialchars($customer['package_name'] ?? 'N/A'); ?> (Rp <?php echo number_format($customer['package_price'] ?? 0, 0, ',', '.'); ?>)</p>
                             </div>
+                            <?php if ($_SESSION['role'] == 'admin'): ?>
+                            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-end space-x-4">
+                                <a href="edit_customer.php?id=<?php echo $customer['id']; ?>" class="text-blue-600 hover:text-blue-800" title="Edit Pelanggan">
+                                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                </a>
+                                 <a href="customers.php?delete_id=<?php echo $customer['id']; ?>" onclick="return confirm('Anda yakin ingin menghapus pelanggan ini? SEMUA TAGIHAN terkait juga akan dihapus secara permanen.');" class="text-red-600 hover:text-red-800" title="Hapus Pelanggan">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </a>
+                            </div>
+                            <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -218,3 +282,4 @@ $customers = $stmt->fetchAll();
 
 </body>
 </html>
+

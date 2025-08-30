@@ -39,7 +39,8 @@ try {
             $total_amount = $base_price + $ppn_amount;
             
             $invoice_number = 'INV/' . date('Y/m/') . $customer['id'];
-            $due_date = date('Y-m-10', strtotime('+1 month')); 
+            // --- PERBAIKAN LOGIKA JATUH TEMPO ---
+            $due_date = date('Y-m-28'); // Jatuh tempo diatur ke tanggal 28 bulan ini.
 
             $sql_insert = "INSERT INTO invoices (customer_id, invoice_number, billing_period, amount, ppn_amount, total_amount, due_date, status)
                            VALUES (?, ?, ?, ?, ?, ?, ?, 'UNPAID')";
@@ -78,3 +79,5 @@ try {
 // Kembali ke halaman tagihan
 header("location: invoices.php");
 exit;
+
+?>

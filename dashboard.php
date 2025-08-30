@@ -15,7 +15,7 @@ $billing_periods = $stmt_periods->fetchAll(PDO::FETCH_COLUMN);
 // 2. Tentukan periode yang dipilih, default ke yang terbaru
 $selected_period = $_GET['period'] ?? ($billing_periods[0] ?? date('Y-m'));
 
-// --- LOGIKA PEMBATASAN WILAYAH UNTUK STATISTIK COLLECTOR ---
+// --- LOGIKA PEMBATASAN WILAYAH & PENDAPATAN UNTUK COLLECTOR ---
 $where_clause_customer = '';
 $params_customer = [];
 $where_clause_invoice = '';
@@ -29,14 +29,16 @@ if ($_SESSION['role'] == 'collector') {
     if (!empty($wilayah_ids)) {
         $placeholders = implode(',', array_fill(0, count($wilayah_ids), '?'));
         
+        // Filter untuk statistik berbasis pelanggan (Total, Aktif, Tagihan, Aktivasi)
         $where_clause_customer = "WHERE wilayah_id IN (" . $placeholders . ")";
         $params_customer = $wilayah_ids;
-
         $where_clause_invoice = "AND c.wilayah_id IN (" . $placeholders . ")";
         $params_invoice = $wilayah_ids;
 
-        $where_clause_payment = "AND c.wilayah_id IN (" . $placeholders . ")";
-        $params_payment = $wilayah_ids;
+        // --- PERBAIKAN BUG PENDAPATAN COLLECTOR ---
+        // Filter untuk statistik pendapatan HANYA berdasarkan ID collector yang login
+        $where_clause_payment = "AND p.confirmed_by = ?";
+        $params_payment = [$_SESSION['id']];
 
     } else {
         // Jika collector tidak punya wilayah, tampilkan data 0
@@ -48,7 +50,7 @@ if ($_SESSION['role'] == 'collector') {
 
 // --- PENGAMBILAN DATA STATISTIK ---
 
-// Total Pelanggan & Pelanggan Aktif (Data Global, tidak terpengaruh periode)
+// Total Pelanggan & Pelanggan Aktif (Berdasarkan wilayah collector)
 $stmt_total_customers = $pdo->prepare("SELECT COUNT(id) FROM customers {$where_clause_customer}");
 $stmt_total_customers->execute($params_customer);
 $total_customers = $stmt_total_customers->fetchColumn();
@@ -58,13 +60,13 @@ $stmt_active_customers->execute($params_customer);
 $active_customers = $stmt_active_customers->fetchColumn();
 
 
-// Tagihan Belum Lunas (Berdasarkan periode yang dipilih)
+// Tagihan Belum Lunas (Berdasarkan periode dan wilayah collector)
 $sql_unpaid = "SELECT COUNT(i.id) FROM invoices i JOIN customers c ON i.customer_id = c.id WHERE i.status IN ('UNPAID', 'OVERDUE') AND i.billing_period = ? {$where_clause_invoice}";
 $stmt_unpaid = $pdo->prepare($sql_unpaid);
 $stmt_unpaid->execute(array_merge([$selected_period], $params_invoice));
 $unpaid_invoices_count = $stmt_unpaid->fetchColumn();
 
-// Pendapatan (Berdasarkan periode pembayaran yang dipilih)
+// Pendapatan (Berdasarkan periode dan ID collector yang mengonfirmasi)
 $month_start = $selected_period . '-01 00:00:00';
 $month_end = date('Y-m-t 23:59:59', strtotime($month_start));
 $sql_income = "SELECT SUM(p.amount_paid) FROM payments p JOIN invoices i ON p.invoice_id = i.id JOIN customers c ON i.customer_id = c.id WHERE p.payment_date BETWEEN ? AND ? {$where_clause_payment}";
@@ -72,7 +74,7 @@ $stmt_monthly_income = $pdo->prepare($sql_income);
 $stmt_monthly_income->execute(array_merge([$month_start, $month_end], $params_payment));
 $monthly_income = $stmt_monthly_income->fetchColumn() ?? 0;
 
-// Butuh Aktivasi Manual (Data Global, tidak terpengaruh periode agar selalu terlihat)
+// Butuh Aktivasi Manual (Berdasarkan wilayah collector)
 $sql_manual_activation = "SELECT COUNT(i.id) FROM invoices i JOIN customers c ON i.customer_id = c.id WHERE i.requires_manual_activation = TRUE {$where_clause_invoice}";
 $stmt_manual_activation = $pdo->prepare($sql_manual_activation);
 $stmt_manual_activation->execute($params_invoice);

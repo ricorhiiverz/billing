@@ -20,7 +20,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $password = trim($_POST["password"]);
 
         // Menyiapkan statement SQL untuk mengambil data user
-        $sql = "SELECT id, email, password, role FROM users WHERE email = :email";
+        $sql = "SELECT id, email, password, role, permissions_version FROM users WHERE email = :email";
 
         if ($stmt = $pdo->prepare($sql)) {
             // Bind variabel ke statement
@@ -34,6 +34,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $id = $row["id"];
                         $hashed_password = $row["password"];
                         $role = $row["role"];
+                        $permissions_version = $row["permissions_version"];
 
                         // Verifikasi password
                         if (password_verify($password, $hashed_password)) {
@@ -45,13 +46,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             $_SESSION["id"] = $id;
                             $_SESSION["email"] = $email;
                             $_SESSION["role"] = $role;
+                            $_SESSION["permissions_version"] = $permissions_version; // SIMPAN VERSI IZIN
 
-                            // **LOGIKA BARU: Jika yang login adalah collector, ambil data wilayahnya**
+                            // Jika yang login adalah collector, ambil data wilayahnya
                             if ($role == 'collector') {
                                 $stmt_wilayah = $pdo->prepare("SELECT wilayah_id FROM user_wilayah WHERE user_id = ?");
                                 $stmt_wilayah->execute([$id]);
                                 $wilayah_ids = $stmt_wilayah->fetchAll(PDO::FETCH_COLUMN);
-                                $_SESSION['wilayah_ids'] = $wilayah_ids; // Simpan ID wilayah ke session
+                                $_SESSION['wilayah_ids'] = $wilayah_ids; 
                             }
 
                             // Arahkan pengguna ke halaman dashboard
@@ -74,9 +76,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             unset($stmt);
         }
     }
-
-    // Tutup koneksi
-    unset($pdo);
 }
 ?>
 <!DOCTYPE html>
@@ -128,3 +127,4 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
 </body>
 </html>
+

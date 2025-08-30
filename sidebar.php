@@ -2,17 +2,24 @@
 // Dapatkan nama file saat ini untuk menandai menu aktif
 $current_page = basename($_SERVER['PHP_SELF']);
 $user_role = $_SESSION['role'] ?? 'guest'; // Ambil peran pengguna dari session
+
+// Ambil data logo dan nama perusahaan dari database
+try {
+    $stmt_branding = $pdo->query("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('company_name', 'company_logo_url')");
+    $branding_settings = $stmt_branding->fetchAll(PDO::FETCH_KEY_PAIR);
+} catch (Exception $e) {
+    $branding_settings = []; // Set default jika query gagal
+}
+$company_name = $branding_settings['company_name'] ?? 'Billing ISP';
+$company_logo_url = $branding_settings['company_logo_url'] ?? '';
 ?>
-<!-- 
-  Perubahan:
-  - Div pembungkus utama sekarang memiliki class untuk transisi dan posisi.
-  - Posisinya 'fixed' agar selalu tampil di layar.
-  - Secara default disembunyikan di luar layar kiri (-translate-x-full) dan akan muncul di layar medium ke atas (md:translate-x-0).
-  - JavaScript akan mengontrol class 'translate-x-0' untuk menampilkannya di mobile.
--->
 <div id="sidebar-menu" class="fixed top-0 left-0 w-64 h-full bg-white shadow-lg z-20 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
-    <div class="flex items-center justify-center h-16 bg-white shadow-md">
-        <h1 class="text-2xl font-bold text-gray-800">Billing ISP</h1>
+    <div class="flex items-center justify-center h-16 bg-white shadow-md px-4">
+        <?php if (!empty($company_logo_url)): ?>
+            <img src="<?php echo htmlspecialchars($company_logo_url); ?>" alt="<?php echo htmlspecialchars($company_name); ?> Logo" class="h-10 w-auto object-contain">
+        <?php else: ?>
+            <h1 class="text-2xl font-bold text-gray-800 truncate"><?php echo htmlspecialchars($company_name); ?></h1>
+        <?php endif; ?>
     </div>
     <div class="flex-grow">
         <nav class="flex-1 px-2 py-4 space-y-1">
@@ -29,12 +36,16 @@ $user_role = $_SESSION['role'] ?? 'guest'; // Ambil peran pengguna dari session
                 Tagihan
             </a>
             
-            <!-- --- Menu hanya untuk Admin --- -->
-            <?php if ($user_role == 'admin'): ?>
+            <!-- --- Menu untuk Admin & Collector --- -->
+            <?php if (in_array($user_role, ['admin', 'collector'])): ?>
                 <a href="reports.php" class="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-md <?php echo ($current_page == 'reports.php') ? 'bg-gray-200 text-gray-800' : ''; ?>">
                     <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                     Laporan
                 </a>
+            <?php endif; ?>
+            
+            <!-- --- Menu hanya untuk Admin --- -->
+            <?php if ($user_role == 'admin'): ?>
                 <a href="packages.php" class="flex items-center px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-md <?php echo in_array($current_page, ['packages.php', 'add_package.php', 'edit_package.php']) ? 'bg-gray-200 text-gray-800' : ''; ?>">
                     <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
                     Paket
@@ -59,3 +70,4 @@ $user_role = $_SESSION['role'] ?? 'guest'; // Ambil peran pengguna dari session
         </nav>
     </div>
 </div>
+

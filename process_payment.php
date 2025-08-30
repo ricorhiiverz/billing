@@ -14,7 +14,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
     $invoice_ids_str = $_POST['invoice_ids'] ?? '';
     $invoice_ids = explode(',', $invoice_ids_str);
     $final_amount_paid = $_POST['amount_paid'];
-    $total_discount = ($_SESSION['role'] == 'admin' && isset($_POST['discount'])) ? $_POST['discount'] : 0;
+    
+    // --- PERBAIKAN BUG DISKON UNTUK COLLECTOR ---
+    // Logika diubah agar admin dan collector bisa memasukkan diskon.
+    $total_discount = (in_array($_SESSION['role'], ['admin', 'collector']) && isset($_POST['discount'])) ? $_POST['discount'] : 0;
 
     if (empty($invoice_ids) || empty($invoice_ids[0]) || !is_numeric($final_amount_paid)) {
         $_SESSION['error_message'] = "Data tidak lengkap.";
@@ -26,7 +29,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
         $pdo->beginTransaction();
 
         // 1. Ambil detail semua invoice yang akan dibayar untuk validasi dan kalkulasi
-        // PERBAIKAN: Menambahkan alias 'i' dan 'c' untuk menghindari ambiguitas pada kolom 'id'.
         $placeholders = implode(',', array_fill(0, count($invoice_ids), '?'));
         $sql_invoices = "SELECT i.id, i.customer_id, i.total_amount, c.wilayah_id 
                          FROM invoices i 

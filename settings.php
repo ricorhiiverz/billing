@@ -67,11 +67,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <?php endif; ?>
 
                 <form action="settings.php" method="POST" class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
-                    <h3 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">Umum</h3>
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 border-b pb-2">Branding & Umum</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <label for="company_name" class="block mb-2 text-sm font-medium text-gray-600">Nama Perusahaan</label>
+                            <input type="text" id="company_name" name="company_name" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-3" value="<?php echo htmlspecialchars($settings['company_name'] ?? 'Billing ISP'); ?>" placeholder="Nama Perusahaan Anda">
+                        </div>
                         <div>
                             <label for="ppn_percentage" class="block mb-2 text-sm font-medium text-gray-600">PPN (%)</label>
                             <input type="number" step="0.01" id="ppn_percentage" name="ppn_percentage" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-3" value="<?php echo htmlspecialchars($settings['ppn_percentage'] ?? '11'); ?>">
+                        </div>
+                        <div class="md:col-span-2">
+                            <label for="company_logo_url" class="block mb-2 text-sm font-medium text-gray-600">URL Logo Perusahaan</label>
+                            <input type="text" id="company_logo_url" name="company_logo_url" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-3" value="<?php echo htmlspecialchars($settings['company_logo_url'] ?? ''); ?>" placeholder="https://.../logo.png">
+                            <p class="mt-1 text-xs text-gray-500">Masukkan link langsung ke gambar logo Anda. Kosongkan untuk menampilkan nama perusahaan.</p>
                         </div>
                          <div>
                             <label for="fonnte_token" class="block mb-2 text-sm font-medium text-gray-600">Fonnte API Token</label>
@@ -107,7 +116,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="border-t pt-6 mb-8">
                         <h4 class="font-semibold text-gray-600 mb-4">API Keys Tripay</h4>
                         <div class="space-y-4">
-                            <!-- PERBAIKAN: Menambahkan input untuk Tripay Merchant Code -->
                              <div>
                                 <label for="tripay_merchant_code" class="block mb-2 text-sm font-medium text-gray-600">Kode Merchant</label>
                                 <input type="text" id="tripay_merchant_code" name="tripay_merchant_code" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg w-full p-3" value="<?php echo htmlspecialchars($settings['tripay_merchant_code'] ?? ''); ?>">
