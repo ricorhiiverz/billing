@@ -1,12 +1,28 @@
 <?php
+// Mencegah output error PHP merusak format JSON
+error_reporting(0);
+ini_set('display_errors', 0);
+
 require_once 'config.php';
 require_once 'routeros_api.class.php';
 require_once 'whatsapp_helper.php';
 
+// Set header untuk response JSON di awal
+header('Content-Type: application/json');
+
+// Fungsi bantuan untuk mengirim response JSON dan menghentikan skrip
+function send_json_response($success, $message, $data = []) {
+    // Pastikan tidak ada output lain sebelum ini
+    if (ob_get_level()) {
+        ob_end_clean();
+    }
+    echo json_encode(['success' => $success, 'message' => $message, 'data' => $data]);
+    exit;
+}
+
 // Proteksi Halaman
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true || !in_array($_SESSION['role'], ['admin', 'collector'])) {
-    header("location: login.php");
-    exit;
+    send_json_response(false, "Sesi tidak valid atau hak akses tidak memadai.");
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
@@ -14,21 +30,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
     $invoice_ids_str = $_POST['invoice_ids'] ?? '';
     $invoice_ids = explode(',', $invoice_ids_str);
     $final_amount_paid = $_POST['amount_paid'];
-    
-    // --- PERBAIKAN BUG DISKON UNTUK COLLECTOR ---
-    // Logika diubah agar admin dan collector bisa memasukkan diskon.
     $total_discount = (in_array($_SESSION['role'], ['admin', 'collector']) && isset($_POST['discount'])) ? $_POST['discount'] : 0;
 
     if (empty($invoice_ids) || empty($invoice_ids[0]) || !is_numeric($final_amount_paid)) {
-        $_SESSION['error_message'] = "Data tidak lengkap.";
-        header("location: customers.php");
-        exit;
+        send_json_response(false, "Data yang dikirim tidak lengkap atau tidak valid.");
     }
 
     try {
         $pdo->beginTransaction();
 
-        // 1. Ambil detail semua invoice yang akan dibayar untuk validasi dan kalkulasi
         $placeholders = implode(',', array_fill(0, count($invoice_ids), '?'));
         $sql_invoices = "SELECT i.id, i.customer_id, i.total_amount, c.wilayah_id 
                          FROM invoices i 
@@ -45,26 +55,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
         $customer_id = $invoices_to_pay[0]['customer_id'];
         $total_bill = array_sum(array_column($invoices_to_pay, 'total_amount'));
 
-        // --- VALIDASI WILAYAH UNTUK COLLECTOR ---
         if ($_SESSION['role'] == 'collector') {
             $customer_wilayah_id = $invoices_to_pay[0]['wilayah_id'];
             if (!$customer_wilayah_id || !in_array($customer_wilayah_id, $_SESSION['wilayah_ids'])) {
-                $_SESSION['error_message'] = "Akses ditolak! Anda tidak berwenang mengonfirmasi pembayaran untuk pelanggan di luar wilayah Anda.";
-                header("location: customers.php");
-                exit;
+                 throw new Exception("Akses ditolak! Anda tidak berwenang mengonfirmasi pembayaran untuk pelanggan di luar wilayah Anda.");
             }
         }
         
-        // 2. Update status SEMUA invoice menjadi 'PAID'
         $stmt_update = $pdo->prepare("UPDATE invoices SET status = 'PAID' WHERE id IN ($placeholders)");
         $stmt_update->execute($invoice_ids);
 
-        // 3. Buat record pembayaran untuk SETIAP invoice
         $payment_date = date('Y-m-d H:i:s');
         $stmt_insert = $pdo->prepare("INSERT INTO payments (invoice_id, amount_paid, discount_amount, payment_method, confirmed_by, payment_date) VALUES (?, ?, ?, 'cash', ?, ?)");
 
         foreach ($invoices_to_pay as $invoice) {
-            // Bagi diskon secara proporsional berdasarkan nilai tagihan
             $proportional_discount = ($total_bill > 0) ? ($invoice['total_amount'] / $total_bill) * $total_discount : 0;
             $amount_paid_for_this_invoice = $invoice['total_amount'] - $proportional_discount;
 
@@ -79,11 +83,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
         
         $pdo->commit();
 
-        // 4. --- Proses Aktivasi & Notifikasi ---
         $sql_details = "SELECT c.id as customer_id, c.name as customer_name, c.phone_number, c.access_method, c.pppoe_user, c.static_ip, r.ip_address, r.api_user, r.api_password FROM customers c JOIN routers r ON c.router_id = r.id WHERE c.id = ?";
         $stmt_details = $pdo->prepare($sql_details);
         $stmt_details->execute([$customer_id]);
         $details = $stmt_details->fetch();
+        
+        $final_message = "Pembayaran berhasil dikonfirmasi.";
 
         if ($details) {
             $activation_success = false;
@@ -118,25 +123,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['invoice_ids'])) {
                 $amount_paid_formatted = number_format($final_amount_paid, 0, ',', '.');
                 $message = "Terima kasih Bapak/Ibu {$customer_name},\n\nPembayaran Anda sebesar *Rp {$amount_paid_formatted}* telah kami terima.\n\nLayanan internet Anda telah diaktifkan kembali. Selamat menikmati!";
                 sendWhatsAppMessage($pdo, $details['phone_number'], $message);
-                $_SESSION['success_message'] = "Pembayaran berhasil dikonfirmasi dan layanan diaktifkan.";
+                $final_message = "Pembayaran berhasil dikonfirmasi dan layanan diaktifkan.";
             } else {
                 $stmt_flag = $pdo->prepare("UPDATE invoices SET requires_manual_activation = TRUE WHERE id IN ($placeholders)");
                 $stmt_flag->execute($invoice_ids);
-                $_SESSION['error_message'] = "Pembayaran berhasil, NAMUN aktivasi otomatis di router GAGAL. Harap periksa koneksi router dan aktifkan pelanggan secara manual.";
+                $final_message = "Pembayaran berhasil, NAMUN aktivasi otomatis di router GAGAL. Harap periksa koneksi router dan aktifkan pelanggan secara manual.";
             }
         }
-
-        header("location: view_customer_invoices.php?id=" . $details['customer_id'] . "&period=" . date('Y-m'));
-        exit;
+        
+        $_SESSION['success_message'] = $final_message;
+        send_json_response(true, $final_message);
 
     } catch (Exception $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        $_SESSION['error_message'] = "Gagal memproses pembayaran: " . $e->getMessage();
-        header("location: customers.php");
-        exit;
+        // Catat error ke log server untuk debugging
+        error_log("Payment Processing Error: " . $e->getMessage());
+        send_json_response(false, "Gagal memproses pembayaran: " . $e->getMessage());
     }
 } else {
-    header("location: customers.php");
-    exit;
+    send_json_response(false, "Permintaan tidak valid.");
 }
 ?>
+

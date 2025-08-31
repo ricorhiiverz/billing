@@ -1,21 +1,27 @@
 <?php
 require_once 'config.php';
 
+// Proteksi Halaman
 if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
     header("location: login.php");
     exit;
 }
 
+// Cek ID di URL
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     header("location: invoices.php");
     exit;
 }
 $invoice_id = $_GET['id'];
 
-$sql = "SELECT i.*, c.id as customer_id, c.name as customer_name, c.address as customer_address, c.phone_number as customer_phone, p.name as package_name
+// Ambil data invoice
+$sql = "SELECT i.*, c.id as customer_id, c.name as customer_name, c.address as customer_address, 
+        c.phone_number as customer_phone, p.name as package_name,
+        pay.payment_method
         FROM invoices i
         JOIN customers c ON i.customer_id = c.id
         JOIN packages p ON c.package_id = p.id
+        LEFT JOIN payments pay ON i.id = pay.invoice_id
         WHERE i.id = ?";
 $stmt = $pdo->prepare($sql);
 $stmt->execute([$invoice_id]);
@@ -26,6 +32,7 @@ if (!$invoice) {
     exit;
 }
 
+// Ambil data pembayaran jika ada
 $sql_payment = "SELECT p.*, u.email as confirmed_by_user 
                 FROM payments p 
                 LEFT JOIN users u ON p.confirmed_by = u.id 
@@ -67,7 +74,6 @@ $payment = $stmt_payment->fetch();
             <div class="max-w-4xl mx-auto">
                 <div class="flex justify-between items-center mb-6">
                     <h2 class="text-2xl md:text-3xl font-bold text-gray-800">Detail Tagihan</h2>
-                    <a href="view_customer_invoices.php?id=<?php echo $invoice['customer_id']; ?>" class="text-blue-600 hover:underline flex-shrink-0">Kembali ke Daftar Tagihan Pelanggan</a>
                 </div>
 
                 <?php if ($invoice['requires_manual_activation']): ?>
@@ -86,7 +92,6 @@ $payment = $stmt_payment->fetch();
                 <?php endif; ?>
 
                 <div class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
-                    <!-- ... (Detail tagihan seperti nomor, periode, dll. tetap di sini) ... -->
                     <div class="flex flex-col sm:flex-row justify-between items-start mb-8 gap-4">
                         <div>
                             <h3 class="text-2xl font-bold text-gray-900 break-all"><?php echo htmlspecialchars($invoice['invoice_number']); ?></h3>
@@ -104,56 +109,80 @@ $payment = $stmt_payment->fetch();
                             </span>
                         </div>
                     </div>
-                    <!-- ... (Sisa detail tagihan) ... -->
 
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 border-y py-6">
+                        <div>
+                           <h4 class="text-sm font-medium text-gray-500 mb-2">Ditujukan Kepada:</h4>
+                           <p class="font-semibold text-gray-800"><?php echo htmlspecialchars($invoice['customer_name']); ?></p>
+                           <p class="text-gray-600"><?php echo nl2br(htmlspecialchars($invoice['customer_address'])); ?></p>
+                           <p class="text-gray-600"><?php echo htmlspecialchars($invoice['customer_phone']); ?></p>
+                        </div>
+                         <div>
+                           <h4 class="text-sm font-medium text-gray-500 mb-2">Detail Tanggal:</h4>
+                           <div class="space-y-1">
+                                <p><span class="font-semibold text-gray-700">Tanggal Dibuat:</span> <?php echo date('d F Y', strtotime($invoice['created_at'])); ?></p>
+                                <p><span class="font-semibold text-gray-700">Jatuh Tempo:</span> <?php echo date('d F Y', strtotime($invoice['due_date'])); ?></p>
+                           </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6">
+                        <h4 class="text-sm font-medium text-gray-500 mb-2">Rincian:</h4>
+                        <div class="space-y-2">
+                             <div class="flex justify-between items-center">
+                                <p class="text-gray-600">Layanan Internet: <?php echo htmlspecialchars($invoice['package_name']); ?></p>
+                                <p class="text-gray-800 font-medium">Rp <?php echo number_format($invoice['amount'], 0, ',', '.'); ?></p>
+                            </div>
+                            <?php if ($invoice['ppn_amount'] > 0): ?>
+                            <div class="flex justify-between items-center">
+                                <p class="text-gray-600">PPN</p>
+                                <p class="text-gray-800 font-medium">Rp <?php echo number_format($invoice['ppn_amount'], 0, ',', '.'); ?></p>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 pt-4 border-t-2 border-gray-200">
+                        <div class="flex justify-between items-center">
+                            <p class="text-lg font-bold text-gray-900">Total</p>
+                            <p class="text-lg font-bold text-gray-900">Rp <?php echo number_format($invoice['total_amount'], 0, ',', '.'); ?></p>
+                        </div>
+                    </div>
+                    
                     <?php if ($invoice['status'] == 'PAID' && $payment): ?>
                         <div class="bg-green-50 p-6 rounded-lg border border-green-200 mt-8">
-                            <h3 class="text-lg font-semibold text-green-800 mb-4">Informasi Pembayaran</h3>
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-lg font-semibold text-green-800">Informasi Pembayaran</h3>
+                                <?php if ($_SESSION['role'] == 'admin' && $invoice['payment_method'] == 'cash'): ?>
+                                    <a href="cancel_payment.php?invoice_id=<?php echo $invoice['id']; ?>&customer_id=<?php echo $invoice['customer_id']; ?>&period=<?php echo $invoice['billing_period']; ?>" 
+                                       onclick="return confirm('Anda yakin ingin membatalkan pembayaran ini? Aksi ini akan mengembalikan status tagihan menjadi BELUM LUNAS.');"
+                                       title="Batalkan Pembayaran"
+                                       class="text-sm text-red-600 hover:text-red-800 flex items-center gap-1">
+                                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                       Batalkan
+                                    </a>
+                                <?php endif; ?>
+                            </div>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div><p class="text-sm text-gray-500">Tanggal Bayar</p><p class="font-medium text-gray-800"><?php echo date('d F Y, H:i', strtotime($payment['payment_date'])); ?></p></div>
-                                <div><p class="text-sm text-gray-500">Metode</p><p class="font-medium text-gray-800"><?php echo ucfirst($payment['payment_method']); ?></p></div>
+                                <div><p class="text-sm text-gray-500">Metode</p><p class="font-medium text-gray-800 capitalize"><?php echo htmlspecialchars($payment['payment_method']); ?></p></div>
                                 <div><p class="text-sm text-gray-500">Jumlah Dibayar</p><p class="font-medium text-gray-800">Rp <?php echo number_format($payment['amount_paid'], 0, ',', '.'); ?></p></div>
                                 <?php if($payment['discount_amount'] > 0): ?>
                                 <div><p class="text-sm text-gray-500">Diskon Diberikan</p><p class="font-medium text-gray-800">Rp <?php echo number_format($payment['discount_amount'], 0, ',', '.'); ?></p></div>
                                 <?php endif; ?>
                                 <?php if($payment['payment_method'] == 'cash'): ?>
-                                <div><p class="text-sm text-gray-500">Dikonfirmasi Oleh</p><p class="font-medium text-gray-800"><?php echo htmlspecialchars($payment['confirmed_by_user']); ?></p></div>
+                                <div><p class="text-sm text-gray-500">Dikonfirmasi Oleh</p><p class="font-medium text-gray-800"><?php echo htmlspecialchars($payment['confirmed_by_user'] ?? 'N/A'); ?></p></div>
                                 <?php endif; ?>
                             </div>
                         </div>
-                    
-                    <?php elseif (($_SESSION['role'] == 'admin') && ($invoice['status'] == 'UNPAID' || $invoice['status'] == 'OVERDUE')): ?>
-                        <!-- --- FORM KHUSUS ADMIN UNTUK PEMBAYARAN & DISKON --- -->
-                        <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 mt-8">
-                             <h3 class="text-lg font-semibold text-gray-800 mb-4">Konfirmasi Pembayaran (Admin)</h3>
-                             <form id="payment-form" action="process_payment.php" method="POST" onsubmit="return confirm('Anda yakin ingin mengonfirmasi pembayaran ini?');">
-                                <input type="hidden" name="invoice_id" value="<?php echo $invoice_id; ?>">
-                                
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700">Total Tagihan</label>
-                                        <input type="text" id="total_amount_display" class="mt-1 w-full bg-gray-200 rounded-md border-gray-300 p-2" value="Rp <?php echo number_format($invoice['total_amount'], 0, ',', '.'); ?>" readonly>
-                                        <input type="hidden" id="total_amount" value="<?php echo $invoice['total_amount']; ?>">
-                                    </div>
-                                    <div>
-                                        <label for="discount" class="block text-sm font-medium text-gray-700">Diskon (Rp)</label>
-                                        <input type="number" id="discount" name="discount" class="mt-1 w-full rounded-md border-gray-300 shadow-sm p-2" value="0" min="0">
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-medium text-gray-700">Jumlah Bayar Final</label>
-                                        <input type="text" id="final_amount_display" class="mt-1 w-full bg-gray-200 rounded-md border-gray-300 p-2" readonly>
-                                        <input type="hidden" id="amount_paid" name="amount_paid" value="<?php echo $invoice['total_amount']; ?>">
-                                    </div>
-                                </div>
-                                
-                                <div class="text-right mt-6">
-                                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg w-full sm:w-auto">
-                                        Konfirmasi Lunas
-                                    </button>
-                                </div>
-                             </form>
-                        </div>
                     <?php endif; ?>
+
+                    <div class="mt-8 pt-6 border-t text-center">
+                        <a href="invoices.php" class="inline-flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-4 rounded-lg shadow-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                            Kembali ke Daftar Tagihan
+                        </a>
+                    </div>
                 </div>
             </div>
         </main>
@@ -162,39 +191,24 @@ $payment = $stmt_payment->fetch();
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const totalAmount = document.getElementById('total_amount');
-        const discountInput = document.getElementById('discount');
-        const finalAmountDisplay = document.getElementById('final_amount_display');
-        const amountPaidInput = document.getElementById('amount_paid');
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebarMenu = document.getElementById('sidebar-menu');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
 
-        function calculateFinalAmount() {
-            const total = parseFloat(totalAmount.value) || 0;
-            let discount = parseFloat(discountInput.value) || 0;
+        sidebarToggle.addEventListener('click', function() {
+            sidebarMenu.classList.toggle('-translate-x-full');
+            sidebarMenu.classList.toggle('translate-x-0');
+            sidebarOverlay.classList.toggle('hidden');
+        });
 
-            if (discount > total) {
-                discount = total;
-                discountInput.value = total;
-            }
-            if (discount < 0) {
-                discount = 0;
-                discountInput.value = 0;
-            }
-
-            const finalAmount = total - discount;
-            
-            finalAmountDisplay.value = 'Rp ' + new Intl.NumberFormat('id-ID').format(finalAmount);
-            amountPaidInput.value = finalAmount;
-        }
-
-        if (discountInput) {
-            discountInput.addEventListener('input', calculateFinalAmount);
-            // Hitung pertama kali saat halaman dimuat
-            calculateFinalAmount();
-        }
-
-        // ... (kode sidebar toggle tetap sama) ...
+        sidebarOverlay.addEventListener('click', function() {
+            sidebarMenu.classList.add('-translate-x-full');
+            sidebarMenu.classList.remove('translate-x-0');
+            sidebarOverlay.classList.add('hidden');
+        });
     });
 </script>
 
 </body>
 </html>
+

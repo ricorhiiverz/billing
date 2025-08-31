@@ -69,7 +69,45 @@ $invoices = $stmt->fetchAll();
     <title>Manajemen Tagihan - Billing ISP</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
-    <style> body { font-family: 'Inter', sans-serif; } </style>
+    <style> 
+        body { font-family: 'Inter', sans-serif; } 
+        #toast-container {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .toast {
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            color: white;
+            min-width: 300px;
+            max-width: 400px;
+            transform: translateX(120%);
+            opacity: 0;
+            transition: all 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+        .toast.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        .toast.toast-success {
+            background-color: #10B981; /* green-500 */
+        }
+        .toast.toast-error {
+            background-color: #EF4444; /* red-500 */
+        }
+        .toast-icon {
+            margin-right: 0.75rem;
+            flex-shrink: 0;
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
 
@@ -163,9 +201,14 @@ $invoices = $stmt->fetchAll();
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 text-center">
-                                        <a href="view_customer_invoices.php?id=<?php echo $invoice['customer_id']; ?>&period=<?php echo $selected_period; ?>" class="text-blue-600 hover:text-blue-800" title="Proses Bayar">
-                                            <svg class="w-6 h-6 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-                                        </a>
+                                        <div class="flex items-center justify-center space-x-4">
+                                            <a href="view_invoice.php?id=<?php echo $invoice['id']; ?>" class="text-gray-500 hover:text-gray-800" title="Lihat Detail">
+                                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                            </a>
+                                            <button data-customer-id="<?php echo $invoice['customer_id']; ?>" data-customer-name="<?php echo htmlspecialchars($invoice['customer_name']); ?>" data-period="<?php echo $selected_period; ?>" class="open-payment-modal text-blue-600 hover:text-blue-800" title="Proses Bayar">
+                                                <svg class="w-6 h-6 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -174,7 +217,7 @@ $invoices = $stmt->fetchAll();
                 </table>
             </div>
             
-            <!-- (BARU) Tampilan Kartu untuk Mobile -->
+            <!-- Tampilan Kartu untuk Mobile -->
             <div class="md:hidden space-y-4">
                 <?php if (empty($invoices)): ?>
                     <div class="bg-white p-4 rounded-lg shadow text-center text-gray-500">Tidak ada data tagihan yang cocok dengan filter.</div>
@@ -197,10 +240,13 @@ $invoices = $stmt->fetchAll();
                                     <?php echo htmlspecialchars($invoice['status']); ?>
                                 </span>
                             </div>
-                            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-end">
-                                <a href="view_customer_invoices.php?id=<?php echo $invoice['customer_id']; ?>&period=<?php echo $selected_period; ?>" class="text-blue-600 hover:text-blue-800" title="Proses Bayar">
-                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                            <div class="mt-4 pt-4 border-t border-gray-200 flex justify-end space-x-4">
+                                <a href="view_invoice.php?id=<?php echo $invoice['id']; ?>" class="text-gray-500 hover:text-gray-800" title="Lihat Detail">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                                 </a>
+                                <button data-customer-id="<?php echo $invoice['customer_id']; ?>" data-customer-name="<?php echo htmlspecialchars($invoice['customer_name']); ?>" data-period="<?php echo $selected_period; ?>" class="open-payment-modal text-blue-600 hover:text-blue-800" title="Proses Bayar">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                </button>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -210,6 +256,27 @@ $invoices = $stmt->fetchAll();
         </main>
     </div>
 </div>
+
+<!-- Payment Modal -->
+<div id="payment-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+    <div id="modal-content" class="bg-white rounded-xl shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="text-xl font-bold text-gray-800" id="modal-customer-name">Konfirmasi Pembayaran</h3>
+            <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-6 overflow-y-auto" id="modal-body">
+            <!-- Content will be loaded here via JavaScript -->
+            <div class="text-center py-10">
+                <p>Memuat data tagihan...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast-container"></div>
+
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -228,6 +295,145 @@ $invoices = $stmt->fetchAll();
             sidebarMenu.classList.remove('translate-x-0');
             sidebarOverlay.classList.add('hidden');
         });
+
+        // --- TOAST NOTIFICATION FUNCTION ---
+        function showToast(message, type = 'success') {
+            const toastContainer = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+
+            const iconSvg = type === 'success'
+                ? `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`
+                : `<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+
+            toast.innerHTML = `
+                <div class="toast-icon">${iconSvg}</div>
+                <div>${message}</div>
+            `;
+            toastContainer.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => toast.remove());
+            }, 3000);
+        }
+
+        // --- MODAL LOGIC ---
+        const paymentModal = document.getElementById('payment-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const modalBody = document.getElementById('modal-body');
+        const modalCustomerName = document.getElementById('modal-customer-name');
+        const openModalButtons = document.querySelectorAll('.open-payment-modal');
+
+        function openModal() {
+            paymentModal.classList.remove('hidden');
+        }
+
+        function closeModal() {
+            paymentModal.classList.add('hidden');
+            modalBody.innerHTML = '<div class="text-center py-10"><p>Memuat data tagihan...</p></div>'; // Reset body
+        }
+
+        closeModalBtn.addEventListener('click', closeModal);
+        paymentModal.addEventListener('click', function(e) {
+            if (e.target === paymentModal) {
+                closeModal();
+            }
+        });
+
+        openModalButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const customerId = this.dataset.customerId;
+                const customerName = this.dataset.customerName;
+                const period = this.dataset.period;
+
+                modalCustomerName.textContent = `Tagihan untuk ${customerName}`;
+                openModal();
+
+                fetch(`get_invoice_details.php?id=${customerId}&period=${period}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            modalBody.innerHTML = data.html;
+                            attachFormHandlers();
+                        } else {
+                            modalBody.innerHTML = `<p class="text-red-500">${data.message}</p>`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching invoice details:', error);
+                        modalBody.innerHTML = '<p class="text-red-500">Terjadi kesalahan saat mengambil data.</p>';
+                    });
+            });
+        });
+
+        function attachFormHandlers() {
+            const paymentForm = document.getElementById('payment-form-modal');
+            if (paymentForm) {
+                const discountInput = paymentForm.querySelector('#discount');
+                const totalAmount = paymentForm.querySelector('#total_amount');
+                const finalAmountDisplay = paymentForm.querySelector('#final_amount_display');
+                const amountPaidInput = paymentForm.querySelector('#amount_paid');
+
+                function calculateFinalAmount() {
+                    const total = parseFloat(totalAmount.value) || 0;
+                    let discount = parseFloat(discountInput.value) || 0;
+                    if (discount > total) {
+                        discount = total;
+                        discountInput.value = total;
+                    }
+                    if (discount < 0) {
+                        discount = 0;
+                        discountInput.value = 0;
+                    }
+                    const finalAmount = total - discount;
+                    finalAmountDisplay.value = 'Rp ' + new Intl.NumberFormat('id-ID').format(finalAmount);
+                    amountPaidInput.value = finalAmount;
+                }
+                
+                if(discountInput) {
+                   discountInput.addEventListener('input', calculateFinalAmount);
+                   calculateFinalAmount();
+                }
+
+                paymentForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const formData = new FormData(paymentForm);
+                    const submitButton = paymentForm.querySelector('button[type="submit"]');
+                    submitButton.disabled = true;
+                    submitButton.innerHTML = 'Memproses...';
+
+                    fetch('process_payment.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            closeModal();
+                            showToast(data.message, 'success');
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500); 
+                        } else {
+                            showToast(data.message, 'error');
+                            submitButton.disabled = false;
+                            submitButton.innerHTML = 'Konfirmasi Pembayaran Tunai';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error processing payment:', error);
+                        showToast('Terjadi kesalahan jaringan. Silakan coba lagi.', 'error');
+                        submitButton.disabled = false;
+                        submitButton.innerHTML = 'Konfirmasi Pembayaran Tunai';
+                    });
+                });
+            }
+        }
     });
 </script>
 
